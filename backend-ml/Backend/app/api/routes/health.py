@@ -22,5 +22,5 @@ def health():
         db_ok = False
     return HealthOut(status="ok" if db_ok else "degraded", version=s.APP_VERSION,
                      model_loaded=model_loader.is_loaded(), database_connected=db_ok,
-                     firms_enabled=bool(s.active_firms_key and s.ENABLE_LIVE_FIRMS),
+                     firms_enabled=bool(s.FIRMS_MAP_KEY and s.ENABLE_LIVE_FIRMS),
                      ai_enabled=bool(s.ENABLE_AI and s.LLM_PROVIDER != "none"))

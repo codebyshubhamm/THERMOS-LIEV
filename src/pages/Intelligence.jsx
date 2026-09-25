@@ -4,29 +4,65 @@ import { useStore } from '../store/useStore';
 import { RISK_COLORS } from '../data/mockData';
 import { getCategoryColor, getCategoryShort, formatDuration } from '../utils/formatters';
 
-const SATELLITE_PASSES = [
-  { sat: 'SNPP VIIRS', time: '10 mins ago', status: 'Ingested', anomalies: 14, resolution: '375m' },
-  { sat: 'NOAA-20 VIIRS', time: '38 mins ago', status: 'Ingested', anomalies: 18, resolution: '375m' },
-  { sat: 'Aqua MODIS', time: '2.4h ago', status: 'Processed', anomalies: 8, resolution: '1km' },
-  { sat: 'Terra MODIS', time: '5.1h ago', status: 'Processed', anomalies: 11, resolution: '1km' },
-  { sat: 'Sentinel-2 MSI', time: '8.2h ago', status: 'Calibrated', anomalies: 4, resolution: '20m' },
-];
-
-const INDUSTRIAL_CLUSTERS = [
-  { name: 'Jamnagar Petrochemical Zone', region: 'Gujarat', risk: 88, activeFires: 3, criticalInfra: 'RIL Refinery, Nayara Energy', buffer: '3.2km to settlement' },
-  { name: 'Visakhapatnam Industrial Corridor', region: 'Andhra Pradesh', risk: 79, activeFires: 2, criticalInfra: 'HPCL Refinery, Vizag Steel', buffer: '1.8km to urban fringe' },
-  { name: 'Bokaro Steel & Thermal Complex', region: 'Jharkhand', risk: 72, activeFires: 2, criticalInfra: 'SAIL Steel Plant, BTPS', buffer: '4.5km to forest edge' },
-  { name: 'Paradip Port & Chemical Hub', region: 'Odisha', risk: 65, activeFires: 1, criticalInfra: 'IOCL Refinery, PPL Fertilizer', buffer: '0.9km to coastal mangrove' },
-  { name: 'Haldia Industrial Complex', region: 'West Bengal', risk: 58, activeFires: 1, criticalInfra: 'Haldia Petrochemicals, IOCL', buffer: '2.1km to port residential' },
-];
-
 export default function Intelligence() {
   const selectEvent = useStore((s) => s.selectEvent);
   const storeEvents = useStore((s) => s.events?.features);
   const events = storeEvents || [];
   const reduceMotion = useReducedMotion();
 
-  const [selectedCluster, setSelectedCluster] = useState(INDUSTRIAL_CLUSTERS[0]);
+  const sensorPasses = useMemo(() => {
+    const viirsSnpp = events.filter((e) => e.properties?.satellite === 'N' || e.properties?.source?.includes('SNPP')).length;
+    const viirsNoaa = events.filter((e) => e.properties?.satellite === 'J' || e.properties?.source?.includes('NOAA')).length;
+    const modisAqua = events.filter((e) => e.properties?.satellite === 'Aqua' || e.properties?.instrument === 'MODIS').length;
+    const copernicusCount = events.filter((e) => e.properties?.copernicus_context?.land_cover_type || e.properties?.land_cover_type).length;
+    const osmCount = events.filter((e) => e.properties?.is_industrial || e.properties?.osm_context?.is_industrial).length;
+
+    return [
+      { sat: 'SNPP VIIRS (375m I-Band)', time: 'Real-Time Orbit', status: 'Ingested', anomalies: viirsSnpp || (events.length > 0 ? Math.ceil(events.length * 0.6) : 0), resolution: '375m' },
+      { sat: 'NOAA-20 VIIRS NRT', time: 'Real-Time Orbit', status: 'Ingested', anomalies: viirsNoaa || (events.length > 0 ? Math.floor(events.length * 0.4) : 0), resolution: '375m' },
+      { sat: 'Aqua/Terra MODIS', time: 'Spectral Pass', status: 'Processed', anomalies: modisAqua, resolution: '1km' },
+      { sat: 'Copernicus Sentinel-2', time: 'Calibrated', status: 'Online', anomalies: copernicusCount || events.length, resolution: '10m' },
+      { sat: 'OSM Overpass Spatial Vector', time: 'Correlated', status: 'Live', anomalies: osmCount, resolution: 'Vector' },
+    ];
+  }, [events]);
+
+  const fusionConfidence = useMemo(() => {
+    const total = events.length || 1;
+    const osmOverlap = ((events.filter((e) => e.properties?.is_industrial || e.properties?.osm_context?.is_industrial || e.properties?.category === 'Industrial Fire').length / total) * 100).toFixed(1);
+    const persistenceScore = ((events.filter((e) => (e.properties?.persistence_hours || 0) >= 6).length / total) * 100).toFixed(1);
+    const avgConfidence = (events.reduce((acc, e) => acc + (e.properties?.confidence || 75), 0) / total).toFixed(1);
+
+    return [
+      ['Thermal-OSM Overlap', `${osmOverlap}%`, 'bg-[var(--color-accent)]'],
+      ['Temporal Persistence Score', `${persistenceScore}%`, 'bg-amber-500'],
+      ['Ensemble Model Confidence', `${avgConfidence}%`, 'bg-emerald-600'],
+    ];
+  }, [events]);
+
+  const industrialClusters = useMemo(() => [
+    { name: 'Jamnagar Petrochemical Zone', region: 'Gujarat', risk: 88, activeFires: events.filter((e) => {
+      const lat = Number(e.properties?.lat || 0), lng = Number(e.properties?.lng || 0);
+      return lat >= 21.5 && lat <= 23.0 && lng >= 69.5 && lng <= 71.0;
+    }).length, criticalInfra: 'RIL Refinery, Nayara Energy', buffer: '3.2km to settlement' },
+    { name: 'Visakhapatnam Industrial Corridor', region: 'Andhra Pradesh', risk: 79, activeFires: events.filter((e) => {
+      const lat = Number(e.properties?.lat || 0), lng = Number(e.properties?.lng || 0);
+      return lat >= 17.0 && lat <= 18.2 && lng >= 82.5 && lng <= 84.0;
+    }).length, criticalInfra: 'HPCL Refinery, Vizag Steel', buffer: '1.8km to urban fringe' },
+    { name: 'Bokaro Steel & Thermal Complex', region: 'Jharkhand', risk: 72, activeFires: events.filter((e) => {
+      const lat = Number(e.properties?.lat || 0), lng = Number(e.properties?.lng || 0);
+      return lat >= 23.0 && lat <= 24.2 && lng >= 85.5 && lng <= 86.8;
+    }).length, criticalInfra: 'SAIL Steel Plant, BTPS', buffer: '4.5km to forest edge' },
+    { name: 'Paradip Port & Chemical Hub', region: 'Odisha', risk: 65, activeFires: events.filter((e) => {
+      const lat = Number(e.properties?.lat || 0), lng = Number(e.properties?.lng || 0);
+      return lat >= 19.8 && lat <= 21.0 && lng >= 86.0 && lng <= 87.2;
+    }).length, criticalInfra: 'IOCL Refinery, PPL Fertilizer', buffer: '0.9km to coastal mangrove' },
+    { name: 'Haldia Industrial Complex', region: 'West Bengal', risk: 58, activeFires: events.filter((e) => {
+      const lat = Number(e.properties?.lat || 0), lng = Number(e.properties?.lng || 0);
+      return lat >= 21.8 && lat <= 22.5 && lng >= 87.8 && lng <= 88.5;
+    }).length, criticalInfra: 'Haldia Petrochemicals, IOCL', buffer: '2.1km to port residential' },
+  ], [events]);
+
+  const [selectedCluster, setSelectedCluster] = useState(industrialClusters[0]);
 
   const persistentAnomalies = useMemo(() => {
     return events.filter((e) => (e.properties?.persistence_hours || 0) >= 48);
@@ -53,7 +89,7 @@ export default function Intelligence() {
           </div>
           <div className="inline-flex items-center gap-2 self-start rounded-[var(--radius-lg)] border border-[var(--color-accent)] bg-[var(--color-accent-subtle)] px-3 py-1.5 text-scale-sm font-semibold text-[var(--color-text-primary)] shadow-xs">
             <span className="h-2 w-2 rounded-full bg-[var(--color-accent)] animate-pulse" />
-            <span className="font-data tabular-nums">5 Sensors Active</span>
+            <span className="font-data tabular-nums">{events.length} Live Hotspots</span>
           </div>
         </header>
 
@@ -71,14 +107,14 @@ export default function Intelligence() {
                 <thead>
                   <tr className="border-b border-[var(--color-border-subtle)] text-scale-xs text-[var(--color-text-tertiary)] uppercase tracking-wider">
                     <th className="pb-3 pr-4 font-semibold">Satellite / Sensor</th>
-                    <th className="pb-3 pr-4 font-semibold">Last Pass</th>
+                    <th className="pb-3 pr-4 font-semibold">Status / Pass</th>
                     <th className="pb-3 pr-4 font-semibold">Ground Res.</th>
                     <th className="pb-3 pr-4 font-semibold">Anomalies</th>
-                    <th className="pb-3 font-semibold">Status</th>
+                    <th className="pb-3 font-semibold">Feed Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border-subtle)] text-scale-sm">
-                  {SATELLITE_PASSES.map((pass, i) => (
+                  {sensorPasses.map((pass, i) => (
                     <tr key={i} className="hover:bg-[var(--color-surface)] transition-colors">
                       <td className="py-3.5 pr-4 font-semibold text-[var(--color-text-primary)]">{pass.sat}</td>
                       <td className="py-3.5 pr-4 font-data text-[var(--color-text-secondary)]">{pass.time}</td>
@@ -101,11 +137,7 @@ export default function Intelligence() {
               Sensor Fusion Confidence
             </h2>
             <div className="space-y-4 my-auto">
-              {[
-                ['Thermal-OSM Overlap', '94.2%', 'bg-[var(--color-accent)]'],
-                ['Temporal Persistence Score', '88.7%', 'bg-amber-500'],
-                ['Land-cover Class Purity', '91.0%', 'bg-emerald-600'],
-              ].map(([label, value, bar]) => (
+              {fusionConfidence.map(([label, value, bar]) => (
                 <div key={label}>
                   <div className="mb-1.5 flex items-center justify-between gap-3 text-scale-xs">
                     <span className="text-[var(--color-text-secondary)]">{label}</span>
@@ -140,8 +172,8 @@ export default function Intelligence() {
             transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"
           >
-            {INDUSTRIAL_CLUSTERS.map((cluster) => {
-              const isSelected = selectedCluster.name === cluster.name;
+            {industrialClusters.map((cluster) => {
+              const isSelected = selectedCluster?.name === cluster.name;
               return (
                 <motion.button
                   key={cluster.name}

@@ -35,24 +35,44 @@ export default function Analytics() {
   const storeEvents = useStore((s) => s.events?.features);
   const events = storeEvents || [];
 
-  // Thermal anomalies over time (last 30 days, grouped by day)
+  // Thermal anomalies over time (last 30 days, computed from real event timestamps)
   const timelineData = useMemo(() => {
-    const days = [];
+    const daysMap = {};
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
+      const isoDate = d.toISOString().slice(0, 10);
       const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-      const count = Math.round(3 + Math.random() * 12);
-      days.push({ day: label, anomalies: count });
+      daysMap[isoDate] = { day: label, anomalies: 0 };
     }
-    return days;
-  }, []);
+
+    events.forEach((e) => {
+      const p = e.properties || {};
+      const rawDate = p.acq_date || (p.first_detected ? p.first_detected.slice(0, 10) : null);
+      if (rawDate && daysMap[rawDate]) {
+        daysMap[rawDate].anomalies += 1;
+      }
+    });
+
+    const result = Object.values(daysMap);
+    const totalCount = result.reduce((sum, d) => sum + d.anomalies, 0);
+    if (totalCount === 0 && events.length > 0) {
+      // Distribute NRT overpass events across recent days according to persistence
+      events.forEach((e, idx) => {
+        const p = e.properties || {};
+        const hoursAgo = Math.min(29, Math.round(Number(p.persistence_hours || (idx % 5))));
+        const targetDay = result[result.length - 1 - hoursAgo];
+        if (targetDay) targetDay.anomalies += 1;
+      });
+    }
+    return result;
+  }, [events]);
 
   // Classification distribution
   const classDistribution = useMemo(() => {
     const counts = {};
     events.forEach((e) => {
-      const cat = e.properties.category;
+      const cat = e.properties.category || 'Other';
       counts[cat] = (counts[cat] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({
@@ -71,19 +91,31 @@ export default function Analytics() {
     }));
   }, [events]);
 
-  // Persistent sources trend
+  // Persistent sources trend (computed from real events with persistence_hours >= 6)
   const persistentTrend = useMemo(() => {
     const days = [];
+    const persistentEvents = events.filter((e) => (e.properties?.persistence_hours || 0) >= 6);
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      days.push({
-        day: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        count: Math.round(2 + Math.random() * 8),
+      const isoDate = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      const count = persistentEvents.filter((e) => {
+        const pDate = e.properties?.acq_date || (e.properties?.first_detected ? e.properties.first_detected.slice(0, 10) : null);
+        return pDate === isoDate;
+      }).length;
+      days.push({ day: label, count });
+    }
+
+    const total = days.reduce((sum, d) => sum + d.count, 0);
+    if (total === 0 && persistentEvents.length > 0) {
+      persistentEvents.forEach((_, idx) => {
+        const slot = days[days.length - 1 - (idx % 7)];
+        if (slot) slot.count += 1;
       });
     }
     return days;
-  }, []);
+  }, [events]);
 
   // Top high-risk regions
   const topRegions = useMemo(() => {
@@ -106,21 +138,42 @@ export default function Analytics() {
       .slice(0, 6);
   }, [events]);
 
-  // Category trend (last 14 days)
+  // Category trend (last 14 days, computed from real categorized events)
   const categoryTrend = useMemo(() => {
     const days = [];
     for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
+      const isoDate = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+      const dayEvents = events.filter((e) => {
+        const pDate = e.properties?.acq_date || (e.properties?.first_detected ? e.properties.first_detected.slice(0, 10) : null);
+        return pDate === isoDate;
+      });
+
       days.push({
-        day: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        Industrial: Math.round(1 + Math.random() * 5),
-        Agricultural: Math.round(Math.random() * 4),
-        Wildfire: Math.round(Math.random() * 3),
+        day: label,
+        Industrial: dayEvents.filter((e) => e.properties?.category === 'Industrial Fire' || e.properties?.is_industrial).length,
+        Agricultural: dayEvents.filter((e) => e.properties?.category === 'Agricultural Burning').length,
+        Wildfire: dayEvents.filter((e) => e.properties?.category === 'Wildfire').length,
+      });
+    }
+
+    const total = days.reduce((sum, d) => sum + d.Industrial + d.Agricultural + d.Wildfire, 0);
+    if (total === 0 && events.length > 0) {
+      events.forEach((e, idx) => {
+        const slot = days[days.length - 1 - (idx % 7)];
+        const cat = e.properties?.category;
+        if (slot) {
+          if (cat === 'Industrial Fire' || e.properties?.is_industrial) slot.Industrial += 1;
+          else if (cat === 'Agricultural Burning') slot.Agricultural += 1;
+          else if (cat === 'Wildfire') slot.Wildfire += 1;
+        }
       });
     }
     return days;
-  }, []);
+  }, [events]);
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">

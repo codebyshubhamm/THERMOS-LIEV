@@ -31,7 +31,7 @@ def system_status():
         db_s = "online"
     except Exception:
         db_s = "unavailable"
-    firms = "configured" if (s.FIRMS_MAP_KEY and s.ENABLE_LIVE_FIRMS) else ("disabled" if not s.ENABLE_LIVE_FIRMS else "unavailable")
+    firms = "configured" if (s.active_firms_key and s.ENABLE_LIVE_FIRMS) else ("disabled" if not s.ENABLE_LIVE_FIRMS else "unavailable")
     osm_state = "disabled" if not s.ENABLE_OSM else "available"
     ai = "configured" if (s.ENABLE_AI and s.LLM_PROVIDER != "none" and (s.OPENAI_API_KEY or s.GEMINI_API_KEY)) else ("disabled" if not s.ENABLE_AI else "rules-only")
     return SystemStatusOut(

@@ -343,7 +343,7 @@ export default function Investigator() {
             <div className="flex items-center gap-2">
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-scale-xs font-data font-bold uppercase tracking-wider text-emerald-700">
-                LIVE AI ENGINE CONNECTED (http://localhost:8000/api/ai)
+                LIVE AI ENGINE CONNECTED (NASA FIRMS + XGBoost + Gemini RAG)
               </span>
             </div>
             <h2 className="text-scale-lg font-bold text-[var(--color-text-primary)] mt-1">

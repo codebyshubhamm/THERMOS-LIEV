@@ -1,5 +1,5 @@
 const configuredApiUrl = (import.meta.env.VITE_THERMOS_API_URL || '').trim();
-const API_BASE_URL = configuredApiUrl || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+const API_BASE_URL = configuredApiUrl || (import.meta.env.DEV ? 'http://localhost:8000' : 'https://thermos-liev.onrender.com');
 const effectiveApiBase = API_BASE_URL.replace(/\/$/, '');
 
 async function fetchWithFallback(path, options = {}) {
