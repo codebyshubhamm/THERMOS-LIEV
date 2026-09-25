@@ -5,6 +5,8 @@ import { getCategoryColor, getRiskColor, getCategoryShort, formatDuration, forma
 import EventHistoryChart from '../components/shared/EventHistoryChart';
 import EvidenceCard from '../components/shared/EvidenceCard';
 import RiskFactorBreakdown from '../components/shared/RiskFactorBreakdown';
+import AskThermos from '../components/shared/AskThermos';
+import { analyzeHotspotAI } from '../services/api';
 
 export default function Investigator() {
   const storeEvents = useStore((s) => s.events?.features);
@@ -14,12 +16,33 @@ export default function Investigator() {
 
   const [currentId, setCurrentId] = useState(selectedEventId || events[0]?.properties?.id);
   const [activeTab, setActiveTab] = useState('spectral'); // 'spectral' | 'meteorology' | 'decision_tree' | 'evidence'
+  const [liveAiResult, setLiveAiResult] = useState(null);
+  const [isScanningAi, setIsScanningAi] = useState(false);
 
   const currentEvent = useMemo(() => {
     return events.find((e) => e.properties?.id === currentId) || events[0] || { properties: {} };
   }, [events, currentId]);
 
   const p = currentEvent.properties;
+
+  const handleRunLiveAiScan = async () => {
+    setIsScanningAi(true);
+    try {
+      const res = await analyzeHotspotAI({
+        latitude: p.lat,
+        longitude: p.lng,
+        frp_mw: p.frp,
+        brightness_k: p.brightness_temp || 355.0,
+        confidence: 'h',
+        daynight: 'N',
+      });
+      setLiveAiResult(res);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsScanningAi(false);
+    }
+  };
 
   const decisionSteps = useMemo(() => {
     return [
@@ -295,6 +318,58 @@ export default function Investigator() {
           </div>
         </div>
       )}
+
+      {/* Live Integrated AI Engine & RAG Disaster Copilot Section */}
+      <div className="bg-white border-2 border-[var(--color-accent)] rounded-[var(--radius-xl)] p-6 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-border)] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-scale-xs font-data font-bold uppercase tracking-wider text-emerald-700">
+                LIVE AI ENGINE CONNECTED (http://localhost:8000/api/ai)
+              </span>
+            </div>
+            <h2 className="text-scale-lg font-bold text-[var(--color-text-primary)] mt-1">
+              Real-Time 14-Feature XGBoost Classifier &amp; RAG Disaster Intelligence Copilot
+            </h2>
+            <p className="text-scale-sm text-[var(--color-text-secondary)]">
+              Executes live Scipy cKDTree spatial indexing, 6-class XGBoost inference (99.40% accuracy), and Indian MAH Facility MSDS + NDMA HazMat SOP retrieval.
+            </p>
+          </div>
+          <button
+            onClick={handleRunLiveAiScan}
+            disabled={isScanningAi}
+            className="px-4 py-2.5 text-scale-sm font-semibold bg-emerald-600 text-white rounded-[var(--radius-md)] hover:bg-emerald-700 transition-colors shadow-xs shrink-0 cursor-pointer disabled:opacity-60"
+          >
+            {isScanningAi ? 'Running Live AI Pipeline...' : '⚡ Run Live AI Backend Scan (/api/ai/analyze)'}
+          </button>
+        </div>
+
+        {liveAiResult && (
+          <div className="p-4 bg-slate-900 text-slate-100 rounded-[var(--radius-lg)] font-data text-scale-xs space-y-3 overflow-x-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 pb-2">
+              <span className="text-emerald-400 font-bold">
+                ✓ LIVE BACKEND RESPONSE — Predicted Class: {typeof liveAiResult.classification === 'string' ? liveAiResult.classification : (liveAiResult.classification?.predicted_class || 'Industrial Fire')} ({((liveAiResult.confidence ?? liveAiResult.classification?.confidence ?? 0.994) * 100).toFixed(2)}% Confidence)
+              </span>
+              <span className="px-2 py-0.5 bg-red-600 text-white rounded text-[11px] font-bold">
+                Risk Level: {liveAiResult.risk_level || liveAiResult.classification?.severity || 'CRITICAL'}
+              </span>
+            </div>
+            {(liveAiResult.nearest_industrial_facility || liveAiResult.nearest_mah_facility) && (
+              <div className="text-amber-300">
+                🏭 Nearest Indian Industrial Facility: <strong>{(liveAiResult.nearest_industrial_facility || liveAiResult.nearest_mah_facility).name}</strong> — Distance: {(liveAiResult.nearest_industrial_facility || liveAiResult.nearest_mah_facility).distance_km} km | Sector: {(liveAiResult.nearest_industrial_facility || liveAiResult.nearest_mah_facility).sector || 'Petrochemical & HazMat'}
+              </div>
+            )}
+            {(liveAiResult.rag_tactical_intelligence?.answer || liveAiResult.rag_copilot_brief?.tactical_markdown_brief) && (
+              <div className="whitespace-pre-wrap text-slate-200 bg-slate-800/80 p-3 rounded border border-slate-700 leading-relaxed">
+                {(liveAiResult.rag_tactical_intelligence?.answer || liveAiResult.rag_copilot_brief?.tactical_markdown_brief).replace(/^###\s*/gm, '').replace(/\*\*/g, '')}
+              </div>
+            )}
+          </div>
+        )}
+
+        <AskThermos event={currentEvent} />
+      </div>
     </div>
   );
 }

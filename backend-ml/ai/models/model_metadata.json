@@ -1,0 +1,98 @@
+{
+  "model_type": "XGBoost Classifier",
+  "n_classes": 6,
+  "classes": [
+    "Agricultural Burning",
+    "Gas Flare",
+    "Industrial Fire",
+    "Industrial Thermal Source",
+    "Mining Activity",
+    "Wildfire"
+  ],
+  "n_features": 14,
+  "features": [
+    "brightness_k",
+    "frp_mw",
+    "firms_confidence_pct",
+    "daynight",
+    "observation_count_7d",
+    "persistence_hours_7d",
+    "frp_trend_pct",
+    "industrial_proximity_km",
+    "refinery_proximity_km",
+    "mine_proximity_km",
+    "forest_proximity_km",
+    "cropland_proximity_km",
+    "population_5km",
+    "land_cover"
+  ],
+  "feature_importance": [
+    {
+      "feature": "cropland_proximity_km",
+      "importance": 0.1699853539466858
+    },
+    {
+      "feature": "mine_proximity_km",
+      "importance": 0.15621180832386017
+    },
+    {
+      "feature": "forest_proximity_km",
+      "importance": 0.1439136117696762
+    },
+    {
+      "feature": "observation_count_7d",
+      "importance": 0.12390943616628647
+    },
+    {
+      "feature": "industrial_proximity_km",
+      "importance": 0.10610306262969971
+    },
+    {
+      "feature": "population_5km",
+      "importance": 0.09489008784294128
+    },
+    {
+      "feature": "refinery_proximity_km",
+      "importance": 0.07932762801647186
+    },
+    {
+      "feature": "land_cover",
+      "importance": 0.05219631642103195
+    },
+    {
+      "feature": "persistence_hours_7d",
+      "importance": 0.0386241152882576
+    },
+    {
+      "feature": "frp_trend_pct",
+      "importance": 0.026615580543875694
+    },
+    {
+      "feature": "brightness_k",
+      "importance": 0.00250170542858541
+    },
+    {
+      "feature": "frp_mw",
+      "importance": 0.0024591325782239437
+    },
+    {
+      "feature": "daynight",
+      "importance": 0.0019744436722248793
+    },
+    {
+      "feature": "firms_confidence_pct",
+      "importance": 0.001287653110921383
+    }
+  ],
+  "test_accuracy": 0.9940277777777777,
+  "hyperparameters": {
+    "n_estimators": 200,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "random_state": 42
+  },
+  "train_samples": 28800,
+  "test_samples": 7200
+}

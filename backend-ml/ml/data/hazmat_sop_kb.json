@@ -1,0 +1,90 @@
+{
+  "chemicals": {
+    "Benzene": {
+      "cas_number": "71-43-2",
+      "flammability_class": "Class 1A Flammable Liquid",
+      "flash_point_c": -11.0,
+      "autoignition_temp_c": 498.0,
+      "toxic_gas_emission": "Carbon monoxide, toxic aromatic vapors, dense black carcinogenic soot",
+      "suppression_agent": "Alcohol-resistant Aqueous Film Forming Foam (AR-AFFF) or dry chemical powder. NEVER use high-pressure solid water stream which scatters burning liquid.",
+      "evacuation_distance_initial_m": 800,
+      "evacuation_distance_fire_m": 1600,
+      "protective_equipment": "Self-Contained Breathing Apparatus (SCBA) Level A fully encapsulating chemical protective suit."
+    },
+    "Liquefied Petroleum Gas": {
+      "cas_number": "68476-85-7",
+      "flammability_class": "Extremely Flammable Compressed Gas (Class 1)",
+      "flash_point_c": -104.0,
+      "autoignition_temp_c": 405.0,
+      "toxic_gas_emission": "Unburned hydrocarbons, carbon monoxide. Extreme BLEVE (Boiling Liquid Expanding Vapor Explosion) hazard if vessel exposed to flame.",
+      "suppression_agent": "Do NOT extinguish leaking gas fire unless leak can be stopped immediately. Use massive water deluge monitors to cool tank shell from maximum distance.",
+      "evacuation_distance_initial_m": 1000,
+      "evacuation_distance_fire_m": 2500,
+      "protective_equipment": "Thermal protective firefighting turnout gear with SCBA and explosive atmosphere gas detectors."
+    },
+    "Anhydrous Ammonia": {
+      "cas_number": "7664-41-7",
+      "flammability_class": "Toxic / Corrosive / Flammable Gas",
+      "flash_point_c": -11.0,
+      "autoignition_temp_c": 651.0,
+      "toxic_gas_emission": "Highly pungent, suffocating toxic vapor plume (IDLH 300 ppm). Reacts with atmospheric moisture to form dense white corrosive aerosol clouds.",
+      "suppression_agent": "Deploy high-volume water fog / curtain monitors downwind to scrub vapor from air. Do NOT put water directly inside ammonia storage tanks.",
+      "evacuation_distance_initial_m": 1500,
+      "evacuation_distance_fire_m": 3000,
+      "protective_equipment": "Level A gas-tight chemical suit with positive-pressure SCBA."
+    },
+    "Chlorine Gas": {
+      "cas_number": "7782-50-5",
+      "flammability_class": "Non-flammable Oxidizer, Extremely Toxic Gas",
+      "flash_point_c": null,
+      "autoignition_temp_c": null,
+      "toxic_gas_emission": "Yellow-green suffocating gas, 2.5x heavier than air (pools in low-lying trenches). Powerful oxidizer causing rapid explosion of combustibles.",
+      "suppression_agent": "Never spray water directly on chlorine leak. Use alkaline scrubber systems or spray water curtains to knock down dispersing cloud.",
+      "evacuation_distance_initial_m": 2000,
+      "evacuation_distance_fire_m": 4000,
+      "protective_equipment": "Level A encapsulating suit, continuous electrochemical chlorine sensors."
+    },
+    "Crude Oil": {
+      "cas_number": "8002-05-9",
+      "flammability_class": "Class 1B Flammable Liquid",
+      "flash_point_c": -6.0,
+      "autoignition_temp_c": 260.0,
+      "toxic_gas_emission": "Hydrogen sulfide (H2S), sulfur dioxide, polycyclic aromatic hydrocarbons, boilover hazard in open-top tanks.",
+      "suppression_agent": "Sub-surface or topside Class B AFFF foam pourers. Rim seal fire protection system. Cool adjacent storage tanks with water spray.",
+      "evacuation_distance_initial_m": 600,
+      "evacuation_distance_fire_m": 1500,
+      "protective_equipment": "Fire proximity suit with H2S gas detection monitor."
+    },
+    "Ethylene": {
+      "cas_number": "74-85-1",
+      "flammability_class": "Extremely Flammable Gas",
+      "flash_point_c": -136.0,
+      "autoignition_temp_c": 490.0,
+      "toxic_gas_emission": "Carbon monoxide, rapid vapor cloud explosion (VCE) risk if confined.",
+      "suppression_agent": "Shut off fuel feed. Cool vessel walls with fixed water monitors. Dry chemical or carbon dioxide for small manifold fires.",
+      "evacuation_distance_initial_m": 1200,
+      "evacuation_distance_fire_m": 2200,
+      "protective_equipment": "Full structural firefighting gear and positive-pressure SCBA."
+    }
+  },
+  "sops": {
+    "Industrial Accidental Fire": [
+      "Phase 1: Immediate isolation of hydrocarbon / chemical feed lines within 90 seconds of detection.",
+      "Phase 2: Automated activation of fixed deluge spray systems and perimeter foam monitors.",
+      "Phase 3: Sound Facility Emergency Siren (Continuous 3-minute oscillating tone) and notify Local District Emergency Operations Center (DEOC).",
+      "Phase 4: Establish Incident Command Post upwind and outside the minimum 1.5 km thermal radiation threshold (4.75 kW/m²).",
+      "Phase 5: Deploy Mutual Aid Scheme (neighboring industrial units) for backup foam concentrate supply.",
+      "Phase 6: Continuous atmospheric gas monitoring downwind for toxic combustion byproducts (CO, H2S, VOCs)."
+    ],
+    "Gas Flare Anomalous Spike": [
+      "Step 1: Check flare knock-out drum liquid level to rule out hydrocarbon carryover.",
+      "Step 2: Verify steam injection ratio / purge gas flow to restore smokeless flaring combustion.",
+      "Step 3: Inspect upstream relief valves for stuck-open bypass or emergency pressure venting."
+    ],
+    "Wildfire Boundary Interception": [
+      "Step 1: Create a 50-meter clear mineral firebreak along the industrial plant perimeter fence.",
+      "Step 2: Turn on facility exterior water wall monitors to prevent ember ignition of exterior fuel storage tanks.",
+      "Step 3: Coordinate with State Forest Department and Fire Services for back-burning and aerial water drops."
+    ]
+  }
+}

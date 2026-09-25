@@ -124,6 +124,13 @@ def create_app() -> FastAPI:
         internal.router,
     ):
         app.include_router(r, prefix="/api")
+
+    try:
+        from ai.api_router import router as ai_router
+        app.include_router(ai_router, prefix="/api")
+    except Exception as e:
+        log.warning("Optional ai_router not loaded: %s", e)
+
     return app
 
 

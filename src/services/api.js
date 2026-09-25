@@ -5,11 +5,22 @@ const isLoopbackApiUrl = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$
 const usableApiUrl = import.meta.env.DEV || !isLoopbackApiUrl ? configuredApiUrl : '';
 const defaultApiUrl = import.meta.env.DEV ? 'http://localhost:8000' : '';
 const API_BASE_URL = (usableApiUrl || defaultApiUrl).replace(/\/$/, '');
+const FALLBACK_CLOUD_URL = 'https://thermos-backend-gz3d.onrender.com';
 
-// In production, if no explicit API URL is configured, use same-origin (relative) URLs
-// This allows the frontend to call backend APIs deployed on the same domain (e.g., Vercel Functions)
 const isProduction = !import.meta.env.DEV;
 const effectiveApiBase = API_BASE_URL || (isProduction ? '' : 'http://localhost:8000');
+
+async function fetchWithFallback(path, options = {}) {
+  try {
+    const res = await fetch(`${effectiveApiBase}${path}`, options);
+    if (res.ok) return await res.json();
+  } catch (_) {
+    // Try cloud backend fallback if localhost is not running
+  }
+  const cloudRes = await fetch(`${FALLBACK_CLOUD_URL}${path}`, options);
+  if (!cloudRes.ok) throw new Error(`Request failed (${cloudRes.status})`);
+  return cloudRes.json();
+}
 
 function demoFallbackGeoJSON() {
   return {
@@ -35,7 +46,6 @@ export async function fetchFires(params = {}) {
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      // Fallback to legacy endpoint if /api/fires returns 404
       if (response.status === 404) {
         return fetchAnomalies();
       }
@@ -44,7 +54,6 @@ export async function fetchFires(params = {}) {
     return await response.json();
   } catch (err) {
     console.warn('Backend fetch failed, using fallback:', err);
-    // Offline / fallback mode
     return demoFallbackGeoJSON();
   }
 }
@@ -72,6 +81,47 @@ export async function fetchStats() {
 }
 
 /**
+ * Standalone AI RAG Copilot endpoint (/api/ai/chat with /api/rag/chat fallback)
+ */
+export async function askThermosCopilot(query, anomalyId = null, eventProps = null) {
+  const lat = eventProps?.lat ?? eventProps?.latitude ?? null;
+  const lng = eventProps?.lng ?? eventProps?.longitude ?? null;
+  const facilityId = eventProps?.facility_id ?? null;
+  try {
+    const data = await fetchWithFallback('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, facility_id: facilityId, latitude: lat, longitude: lng }),
+    });
+    if (data && data.answer) return data;
+  } catch (_) {
+    // Fallback to /api/rag/chat
+  }
+  try {
+    const ragData = await fetchWithFallback('/api/rag/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, anomaly_id: anomalyId, facility_id: facilityId }),
+    });
+    if (ragData && ragData.answer) return ragData;
+  } catch (_) {
+    // Fallback to null
+  }
+  return null;
+}
+
+/**
+ * Standalone End-to-End 14-Feature XGBoost + RAG Analysis endpoint (/api/ai/analyze)
+ */
+export async function analyzeHotspotAI(payload) {
+  return fetchWithFallback('/api/ai/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
  * Predict classification, risk, and explainability for any coordinate location
  */
 export async function predictLocation({ latitude, longitude, brightness_k, frp_mw, confidence, daynight }) {
@@ -84,9 +134,6 @@ export async function predictLocation({ latitude, longitude, brightness_k, frp_m
     ...(daynight != null ? { daynight } : {}),
   };
 
-  // Send X-User-Role header so backend get_current_user has a role context.
-  // In dev, use Admin to bypass auth. In production, use a default role to ensure
-  // the backend doesn't reject the request due to missing auth context.
   const headers = { 'Content-Type': 'application/json' };
   headers['X-User-Role'] = import.meta.env.DEV ? 'Admin' : 'Analyst';
 
@@ -117,7 +164,6 @@ export async function predictLocation({ latitude, longitude, brightness_k, frp_m
 export function normalizeAnomaly(feature) {
   const properties = feature.properties || {};
 
-  // Extract coordinates and guarantee numbers
   let rawLng = feature.geometry?.coordinates?.[0];
   let rawLat = feature.geometry?.coordinates?.[1];
 
@@ -174,16 +220,6 @@ export function normalizeAnomaly(feature) {
  */
 export async function fetchLiveEvents() {
   const data = await fetchFires();
-  console.debug('[fetchLiveEvents] Raw API response:', { 
-    status: data.status, 
-    data_mode: data.data_mode, 
-    count: data.count,
-    hasFeatures: !!data.features,
-    featuresLength: data.features?.length,
-    hasFires: !!data.fires,
-    firesLength: data.fires?.length
-  });
-  
   const rawFeatures = data.features || (Array.isArray(data.fires) ? data.fires.map((f) => ({
     type: 'Feature',
     id: f.id,
@@ -192,14 +228,10 @@ export async function fetchLiveEvents() {
   })) : []);
 
   if (!rawFeatures || rawFeatures.length === 0) {
-    console.warn('[fetchLiveEvents] No features found, returning demo fallback');
     return demoFallbackGeoJSON();
   }
 
-  // Backend returns data_mode at top level: 'live' or 'demo'
   const source = data.data_mode === 'live' ? 'live' : 'demo';
-  console.info('[fetchLiveEvents] Resolved data source:', source, '| Loaded features count:', rawFeatures.length);
-  
   return {
     type: 'FeatureCollection',
     metadata: {
@@ -210,10 +242,15 @@ export async function fetchLiveEvents() {
 }
 
 /**
- * Ask a custom question or submit an inquiry to the AI Investigator / Chatbot
- * Calls POST /api/events/{id}/ask with fallback to POST /api/investigator/ask
+ * Ask a custom question or submit an inquiry to the AI Investigator / RAG Disaster Copilot
+ * Calls /api/ai/chat -> /api/events/{id}/ask -> /api/investigator/ask
  */
 export async function askEventQuestion({ eventId, question, context = {} }) {
+  const copilotRes = await askThermosCopilot(question, eventId, context);
+  if (copilotRes && copilotRes.answer) {
+    return copilotRes;
+  }
+
   const payload = {
     event_id: eventId,
     question: (question || '').trim(),
@@ -223,7 +260,6 @@ export async function askEventQuestion({ eventId, question, context = {} }) {
   const primaryUrl = `${effectiveApiBase}/api/events/${encodeURIComponent(eventId)}/ask`;
   const fallbackUrl = `${effectiveApiBase}/api/investigator/ask`;
 
-  // Try primary /api/events/{id}/ask
   try {
     const res = await fetch(primaryUrl, {
       method: 'POST',
@@ -233,15 +269,11 @@ export async function askEventQuestion({ eventId, question, context = {} }) {
       },
       body: JSON.stringify(payload),
     });
-
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    console.debug('[askEventQuestion] Primary endpoint error:', err);
+    if (res.ok) return await res.json();
+  } catch (_) {
+    // Try next endpoint
   }
 
-  // Try fallback /api/investigator/ask
   try {
     const fbRes = await fetch(fallbackUrl, {
       method: 'POST',
@@ -251,12 +283,9 @@ export async function askEventQuestion({ eventId, question, context = {} }) {
       },
       body: JSON.stringify(payload),
     });
-
-    if (fbRes.ok) {
-      return await fbRes.json();
-    }
-  } catch (err) {
-    console.debug('[askEventQuestion] Fallback endpoint error:', err);
+    if (fbRes.ok) return await fbRes.json();
+  } catch (_) {
+    // Fallback
   }
 
   return null;
