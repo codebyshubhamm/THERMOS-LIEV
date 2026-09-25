@@ -104,7 +104,11 @@ def generate_fire_explanation(context: dict[str, Any]) -> str | None:
     osm = context.get("osm") or context.get("osm_context") or {}
     copernicus = context.get("copernicus") or context.get("copernicus_context") or {}
 
-    user_prompt = f"""Explain this fire event classification in 2-3 sentences based ONLY on the evidence below:
+    origin_est = context.get("origin_estimate") or (context.get("origin") or {}).get("description")
+    containment_est = context.get("containment_estimate") or (context.get("containment") or {}).get("description")
+    exposure_est = context.get("surrounding_exposure") or (context.get("exposure") or {}).get("description")
+
+    user_prompt = f"""Generate an authoritative situational briefing (3-4 concise sentences) for emergency operators based ONLY on the evidence below:
 
 Classification:
 - Category: {category}
@@ -116,21 +120,25 @@ NASA FIRMS Satellite Observation:
 - Fire Radiative Power (FRP): {firms.get('frp', 'N/A')} MW
 - Confidence: {firms.get('confidence', 'N/A')}
 
-OpenStreetMap Industrial Context:
+OpenStreetMap Industrial & Emergency Context:
 - Is Industrial Zone: {osm.get('is_industrial', False)}
 - Nearest Industrial Distance: {osm.get('nearest_industrial_distance_m', 'None')} m
 - Matched Tags: {json.dumps(osm.get('relevant_tags') or osm.get('matched_tags') or {})}
+{f"- Origin / Activity History: {origin_est}" if origin_est else ""}
+{f"- Containment & Spread Dynamics: {containment_est}" if containment_est else ""}
+{f"- Surrounding Exposure & Emergency Infrastructure: {exposure_est}" if exposure_est else ""}
 
 Copernicus Sentinel Context:
 - Land Cover Type: {copernicus.get('land_cover_type', 'unavailable')}
 - NDVI Vegetation Index: {copernicus.get('ndvi_value', 'unavailable')}
 """
 
-    # Model configuration: default to gemini-flash-lite-latest (verified active in v1beta API)
-    model_name = getattr(settings, "GEMINI_MODEL", "gemini-flash-lite-latest") or "gemini-flash-lite-latest"
-    api_version = "v1beta"
-    endpoint = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}"
-    log.info("[ai_explainer] Using model: %s, endpoint: %s", model_name, endpoint)
+    # Model configuration: default to gemini-3.1-flash-lite (verified active and fast in v1beta API)
+    primary_model = getattr(settings, "GEMINI_MODEL", "gemini-3.1-flash-lite") or "gemini-3.1-flash-lite"
+    candidate_models = []
+    for m in [primary_model, "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash"]:
+        if m and m not in candidate_models:
+            candidate_models.append(m)
 
     request_body = {
         "system_instruction": {
@@ -148,51 +156,32 @@ Copernicus Sentinel Context:
         }
     }
 
-    try:
-        with httpx.Client(timeout=8.0) as client:
-            log.info("[ai_explainer] Sending request to Gemini API...")
-            resp = client.post(endpoint, json=request_body)
-            log.info("[ai_explainer] Gemini API response status: %s", resp.status_code)
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts and "text" in parts[0]:
-                        explanation = parts[0]["text"].strip()
-                        _explanation_cache[cache_hash] = {"_ts": now, "explanation": explanation}
-                        log.info("[ai_explainer] Successfully generated explanation: %s...", explanation[:100])
-                        return explanation
-                log.warning("[ai_explainer] Gemini API returned 200 but no candidate text found: %s", data)
-            elif resp.status_code in (404, 429, 503):
-                # Model not found (404), rate limited (429), or overloaded (503) - try fallback chain with v1beta API
-                fallback_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]
-                for fb_model in fallback_models:
-                    if fb_model == model_name:
-                        continue
-                    fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/{fb_model}:generateContent?key={api_key}"
-                    log.info("[ai_explainer] Trying fallback model: %s (v1beta API)", fb_model)
-                    try:
-                        with httpx.Client(timeout=8.0) as fb_client:
-                            fb_resp = fb_client.post(fallback_url, json=request_body)
-                            log.info("[ai_explainer] Fallback %s response status: %s", fb_model, fb_resp.status_code)
-                            if fb_resp.status_code == 200:
-                                fb_data = fb_resp.json()
-                                candidates = fb_data.get("candidates", [])
-                                if candidates:
-                                    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-                                    if text:
-                                        _explanation_cache[cache_hash] = {"_ts": now, "explanation": text}
-                                        log.info("[ai_explainer] Fallback succeeded with %s: %s...", fb_model, text[:100])
-                                        return text
-                            else:
-                                log.warning("[ai_explainer] Fallback %s failed: %s", fb_model, fb_resp.text[:300])
-                    except Exception as fb_e:
-                        log.warning("[ai_explainer] Fallback %s exception: %s", fb_model, fb_e)
-            else:
-                log.warning("[ai_explainer] Gemini API returned status %s: %s", resp.status_code, resp.text[:500])
-    except Exception as e:
-        log.exception("[ai_explainer] Failed to generate Gemini explanation: %s", e)
+    with httpx.Client(timeout=15.0) as client:
+        for model_name in candidate_models:
+            endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            log.info("[ai_explainer] Querying Gemini model: %s", model_name)
+            try:
+                resp = client.post(endpoint, json=request_body)
+                log.info("[ai_explainer] Model %s response status: %s", model_name, resp.status_code)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and "text" in parts[0]:
+                            explanation = parts[0]["text"].strip()
+                            _explanation_cache[cache_hash] = {"_ts": now, "explanation": explanation}
+                            log.info("[ai_explainer] Successfully generated explanation with %s: %s...", model_name, explanation[:100])
+                            return explanation
+                    log.warning("[ai_explainer] %s returned 200 but no text candidate: %s", model_name, data)
+                elif resp.status_code in (404, 429, 503):
+                    log.warning("[ai_explainer] %s unavailable (status %s), trying next fallback", model_name, resp.status_code)
+                    continue
+                else:
+                    log.warning("[ai_explainer] %s error (status %s): %s", model_name, resp.status_code, resp.text[:300])
+            except Exception as ex:
+                log.warning("[ai_explainer] %s exception (%s), trying next fallback", model_name, ex)
+                continue
 
     # Return None on any failure so parent classification request succeeds untouched
     log.info("[ai_explainer] Returning None (explanation generation failed)")

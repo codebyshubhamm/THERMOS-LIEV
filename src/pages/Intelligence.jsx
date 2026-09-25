@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '../store/useStore';
-import { RISK_COLORS, mockGeoJSON } from '../data/mockData';
+import { RISK_COLORS } from '../data/mockData';
 import { getCategoryColor, getCategoryShort, formatDuration } from '../utils/formatters';
 
 const SATELLITE_PASSES = [
@@ -23,7 +23,7 @@ const INDUSTRIAL_CLUSTERS = [
 export default function Intelligence() {
   const selectEvent = useStore((s) => s.selectEvent);
   const storeEvents = useStore((s) => s.events?.features);
-  const events = (storeEvents && storeEvents.length > 0) ? storeEvents : mockGeoJSON.features;
+  const events = storeEvents || [];
   const reduceMotion = useReducedMotion();
 
   const [selectedCluster, setSelectedCluster] = useState(INDUSTRIAL_CLUSTERS[0]);

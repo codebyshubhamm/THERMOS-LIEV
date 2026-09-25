@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { mockGeoJSON } from '../data/mockData';
 import { fetchLiveEvents, predictLocation as apiPredictLocation } from '../services/api';
 
 export const TIME_PRESETS = {
@@ -71,21 +70,30 @@ export function filterEvents(events, filters, timeSliderValue) {
  * active filters, map display state, and location predictions.
  */
 export const useStore = create((set, get) => ({
-  // All events (GeoJSON)
-  events: mockGeoJSON,
-  dataSource: 'demo',
-  loading: false,
+  // All events (GeoJSON) - Powered by NASA FIRMS Live Pipeline
+  events: {
+    type: 'FeatureCollection',
+    metadata: { source: 'live' },
+    features: [],
+  },
+  dataSource: 'live',
+  loading: true,
   apiError: null,
   hydrateEvents: async () => {
     set({ loading: true, apiError: null });
     try {
+      console.info('[useStore] Hydrating live NASA FIRMS events from backend...');
       const events = await fetchLiveEvents();
+      const count = events.features?.length || 0;
+      const isDemo = events.metadata?.source === 'demo' || events.metadata?.data_mode === 'demo';
+      console.info('[useStore] Live events hydrated. Count:', count, '| Source mode:', isDemo ? 'demo' : 'live');
       set({
         events,
-        dataSource: events.metadata?.source === 'demo' ? 'demo' : 'live',
+        dataSource: isDemo ? 'demo' : 'live',
         loading: false,
       });
     } catch (error) {
+      console.error('[useStore] FIRMS live pipeline hydration failed:', error);
       set({ apiError: error.message, loading: false });
     }
   },

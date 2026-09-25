@@ -191,41 +191,30 @@ class RAGDisasterIntelligenceEngine:
         sops: List[str],
         anomaly_data: Optional[Dict[str, Any]]
     ) -> Optional[RAGChatResponse]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
-        
-        system_context = f"""
-        You are THERMOS AI Copilot, a senior industrial disaster management and chemical hazard specialist for Smart India Hackathon 2026.
-        FACILITY PROFILE: {json.dumps(fac, indent=2)}
-        HAZARDOUS CHEMICALS (MSDS): {json.dumps(chems, indent=2)}
-        STANDARD OPERATING PROCEDURES (SOPs): {json.dumps(sops, indent=2)}
-        ANOMALY TELEMETRY: {json.dumps(anomaly_data, indent=2) if anomaly_data else 'No specific anomaly attached.'}
-        """
-
-        payload = {
-            "contents": [
-                {"role": "user", "parts": [{"text": f"{system_context}\n\nUser Question: {query}"}]}
-            ],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 600}
-        }
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                result = resp.json()
-                text = result["candidates"][0]["content"]["parts"][0]["text"]
-                return RAGChatResponse(
-                    answer=text,
-                    sources_used=[
-                        f"Facility Profile: {fac.get('name') if fac else 'N/A'}",
-                        "MSDS Chemical Database",
-                        "NDMA Industrial Fire Safety Guidelines"
-                    ],
-                    threat_assessment="ACTIVE INDUSTRIAL MONITORING",
-                    action_items=[
-                        f"Deploy {fac.get('fire_suppression_protocol', 'Class B Foam') if fac else 'Class B Foam'}",
-                        f"Maintain {fac.get('evacuation_radius_km', 2.5) if fac else 2.5}km evacuation buffer"
-                    ]
-                )
+        candidate_models = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for model_name in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
+                try:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        text = result["candidates"][0]["content"]["parts"][0]["text"]
+                        return RAGChatResponse(
+                            answer=text,
+                            sources_used=[
+                                f"Facility Profile: {fac.get('name') if fac else 'N/A'}",
+                                "MSDS Chemical Database",
+                                "NDMA Industrial Fire Safety Guidelines"
+                            ],
+                            threat_assessment="ACTIVE INDUSTRIAL MONITORING",
+                            action_items=[
+                                f"Deploy {fac.get('fire_suppression_protocol', 'Class B Foam') if fac else 'Class B Foam'}",
+                                f"Maintain {fac.get('evacuation_radius_km', 2.5) if fac else 2.5}km evacuation buffer"
+                            ]
+                        )
+                except Exception:
+                    continue
         return None
 
 

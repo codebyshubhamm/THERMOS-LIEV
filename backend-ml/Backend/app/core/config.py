@@ -3,13 +3,23 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ROOT_DIR = _BACKEND_DIR.parent.parent
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env", "../../.env"),
+        env_file=(
+            str(_BACKEND_DIR / ".env"),
+            str(_ROOT_DIR / ".env"),
+            ".env",
+            "../.env",
+            "../../.env",
+        ),
         env_file_encoding="utf-8",
         extra="ignore"
     )
@@ -77,8 +87,8 @@ class Settings(BaseSettings):
     ENABLE_AI: bool = True
     LLM_PROVIDER: str = "gemini"  # gemini | none
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-flash-lite-latest"
-    AI_MODEL: str = "gemini-flash-lite-latest"
+    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+    AI_MODEL: str = "gemini-3.1-flash-lite"
     OPENAI_API_KEY: str = ""
 
     # ESA WorldCover WMS (Public global 10m land cover; no API key or OAuth credentials required)

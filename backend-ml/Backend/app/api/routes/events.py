@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -218,3 +219,94 @@ def incident_timeline(event_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, f"Event {event_id} not found")
     timeline = audit_service.get_incident_timeline(db, event_id)
     return {"event_id": event_id, "timeline": timeline, "count": len(timeline)}
+
+
+class EventExplainIn(BaseModel):
+    event_id: str | None = None
+    category: str | None = None
+    classification: Any = None
+    confidence: float | int | str | None = None
+    risk_score: float | int | None = None
+    brightness: float | None = None
+    brightness_k: float | None = None
+    frp: float | None = None
+    frp_mw: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    osm: dict[str, Any] | None = None
+    copernicus: dict[str, Any] | None = None
+    context: dict[str, Any] | None = None
+
+
+@router.post("/events/explain")
+@router.post("/explain")
+def explain_fire_event(body: EventExplainIn, db: Session = Depends(get_db)):
+    from app.services.ai_reasoning_service import generate_situational_briefing
+    from app.services.osm_service import get_industrial_context
+    from app.services.copernicus_service import get_copernicus_context
+
+    cat = body.category
+    if not cat and isinstance(body.classification, dict):
+        cat = body.classification.get("category")
+    elif not cat and isinstance(body.classification, str):
+        cat = body.classification
+    cat = cat or "Thermal Hotspot"
+
+    conf = body.confidence or 80.0
+    risk = body.risk_score or 65.0
+    bright = body.brightness or body.brightness_k or 340.0
+    frp = body.frp or body.frp_mw or 25.0
+
+    osm_ctx = body.osm or {}
+    cop_ctx = body.copernicus or {}
+
+    if not osm_ctx and body.latitude is not None and body.longitude is not None:
+        ind = get_industrial_context(body.latitude, body.longitude)
+        rel_tags = ind.get("relevant_tags") or ind.get("matched_tags", {})
+        osm_ctx = {
+            "is_industrial": ind.get("is_industrial", False),
+            "nearest_industrial_distance_m": ind.get("nearest_industrial_distance_m"),
+            "relevant_tags": rel_tags,
+            "matched_tags": rel_tags,
+        }
+
+    if not cop_ctx and body.latitude is not None and body.longitude is not None:
+        cop = get_copernicus_context(body.latitude, body.longitude)
+        cop_ctx = {
+            "land_cover_type": cop.get("land_cover_type"),
+            "ndvi_value": cop.get("ndvi_value"),
+        }
+
+    event_payload = {
+        "id": body.event_id,
+        "category": cat,
+        "confidence": conf,
+        "risk_score": round(float(risk)),
+        "brightness": bright,
+        "brightness_k": bright,
+        "frp": frp,
+        "frp_mw": frp,
+        "latitude": body.latitude,
+        "longitude": body.longitude,
+        "lat": body.latitude,
+        "lng": body.longitude,
+        "osm_context": osm_ctx,
+        "copernicus_context": cop_ctx,
+        "persistence_hours": (body.context or {}).get("persistence_hours") or 6.0,
+        "observation_count": (body.context or {}).get("observation_count") or 1,
+        "first_detected": (body.context or {}).get("first_detected"),
+        "population_5km": (body.context or {}).get("population_5km") or 4500,
+    }
+
+    # Execute AI Situational Reasoning Layer
+    reasoning = generate_situational_briefing(event_payload)
+
+    return {
+        "event_id": body.event_id,
+        "explanation": reasoning["situational_briefing"],
+        "origin": reasoning["origin"],
+        "containment": reasoning["containment"],
+        "exposure": reasoning["exposure"],
+        "status": "success",
+    }
+

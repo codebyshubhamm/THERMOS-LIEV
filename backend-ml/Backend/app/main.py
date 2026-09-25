@@ -72,10 +72,11 @@ def create_app() -> FastAPI:
     s = get_settings()
     app = FastAPI(title=s.APP_NAME, version=s.APP_VERSION, lifespan=lifespan)
 
-    # 1. CORS with explicit allowlist (rejects wildcard in production)
+    # 1. CORS with explicit allowlist + automatic Vercel domain support
     app.add_middleware(
         CORSMiddleware,
         allow_origins=s.cors_origins_list,
+        allow_origin_regex=r"https://.*\.vercel\.app",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],

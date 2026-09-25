@@ -260,8 +260,20 @@ export default function HotspotLayer() {
       const frpVal = p.frp != null ? Number(p.frp).toFixed(1) : '—';
       const brightVal = p.brightness_temp != null ? Number(p.brightness_temp).toFixed(1) : (p.brightness != null ? Number(p.brightness).toFixed(1) : '—');
 
-      const isInd = Boolean(p.is_industrial);
-      const indDistance = p.nearest_industrial_distance_m != null ? Math.round(Number(p.nearest_industrial_distance_m)) : null;
+      let osmData = {};
+      try {
+        osmData = typeof p.osm_context === 'string' ? JSON.parse(p.osm_context || '{}') : (p.osm_context || p.industrial_context || {});
+      } catch {
+        osmData = p.osm_context || p.industrial_context || {};
+      }
+      const isInd = Boolean(p.is_industrial ?? osmData.is_industrial);
+      const rawDist = p.nearest_industrial_distance_m ?? osmData.nearest_industrial_distance_m;
+      const indDistance = rawDist != null ? Math.round(Number(rawDist)) : null;
+      const facilityName = p.nearest_facility_name || osmData.name || osmData.facility_name;
+      const osmSummary = isInd
+        ? `🏭 Industrial zone ${facilityName ? `· ${facilityName}` : ''} ${indDistance != null ? `(${indDistance}m)` : ''}`
+        : (indDistance != null && indDistance < 5000 ? `🏭 Industry ${indDistance}m away` : 'No industrial zone nearby (>2km buffer)');
+
       const landCoverStr = p.land_cover_type ? p.land_cover_type.replace(/_/g, ' ') : (p.land_cover || 'Regional');
       const ndviStr = p.ndvi_value != null ? `NDVI ${Number(p.ndvi_value).toFixed(2)}` : null;
 
@@ -289,10 +301,10 @@ export default function HotspotLayer() {
 
             <!-- Multi-Source Context Badges -->
             <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px;">
-              <div style="font-size: 10px; font-weight: 600; padding: 3px 6px; border-radius: 4px; background: ${isInd ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.2)'}; color: ${isInd ? '#FBBF24' : '#94A3B8'}; border: 1px solid ${isInd ? 'rgba(245, 158, 11, 0.3)' : 'rgba(100, 116, 139, 0.3)'};">
-                ${isInd ? `🏭 Industrial zone nearby ${indDistance != null ? `(${indDistance} m)` : ''}` : 'No industrial infrastructure detected'}
+              <div style="font-size: 10px; font-weight: 600; padding: 4px 7px; border-radius: 4px; background: ${isInd ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.2)'}; color: ${isInd ? '#FBBF24' : '#94A3B8'}; border: 1px solid ${isInd ? 'rgba(245, 158, 11, 0.3)' : 'rgba(100, 116, 139, 0.3)'};">
+                ${osmSummary}
               </div>
-              <div style="font-size: 10px; font-weight: 500; padding: 3px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25);">
+              <div style="font-size: 10px; font-weight: 500; padding: 4px 7px; border-radius: 4px; background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25);">
                 🛰️ Land cover: ${landCoverStr} ${ndviStr ? `· ${ndviStr}` : ''}
               </div>
             </div>

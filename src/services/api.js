@@ -1,35 +1,11 @@
-import { mockGeoJSON } from '../data/mockData';
-
-const configuredApiUrl = import.meta.env.VITE_THERMOS_API_URL?.trim();
-const isLoopbackApiUrl = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(configuredApiUrl || '');
-const usableApiUrl = import.meta.env.DEV || !isLoopbackApiUrl ? configuredApiUrl : '';
-const defaultApiUrl = import.meta.env.DEV ? 'http://localhost:8000' : '';
-const API_BASE_URL = (usableApiUrl || defaultApiUrl).replace(/\/$/, '');
-const FALLBACK_CLOUD_URL = 'https://thermos-backend-gz3d.onrender.com';
-
-const isProduction = !import.meta.env.DEV;
-const effectiveApiBase = API_BASE_URL || (isProduction ? '' : 'http://localhost:8000');
+const configuredApiUrl = (import.meta.env.VITE_THERMOS_API_URL || '').trim();
+const API_BASE_URL = configuredApiUrl || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+const effectiveApiBase = API_BASE_URL.replace(/\/$/, '');
 
 async function fetchWithFallback(path, options = {}) {
-  try {
-    const res = await fetch(`${effectiveApiBase}${path}`, options);
-    if (res.ok) return await res.json();
-  } catch (_) {
-    // Try cloud backend fallback if localhost is not running
-  }
-  const cloudRes = await fetch(`${FALLBACK_CLOUD_URL}${path}`, options);
-  if (!cloudRes.ok) throw new Error(`Request failed (${cloudRes.status})`);
-  return cloudRes.json();
-}
-
-function demoFallbackGeoJSON() {
-  return {
-    ...mockGeoJSON,
-    metadata: {
-      ...(mockGeoJSON.metadata || {}),
-      source: 'demo',
-    },
-  };
+  const res = await fetch(`${effectiveApiBase}${path}`, options);
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
 }
 
 /**
@@ -43,19 +19,17 @@ export async function fetchFires(params = {}) {
   if (params.limit) query.set('limit', String(params.limit));
 
   const url = `${effectiveApiBase}/api/fires${query.toString() ? `?${query.toString()}` : ''}`;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404) {
-        return fetchAnomalies();
-      }
-      throw new Error(`Fires request failed (${response.status})`);
+  console.info('[api] Fetching live FIRMS data from:', url);
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 404) {
+      return fetchAnomalies();
     }
-    return await response.json();
-  } catch (err) {
-    console.warn('Backend fetch failed, using fallback:', err);
-    return demoFallbackGeoJSON();
+    throw new Error(`Fires request failed (${response.status})`);
   }
+  const data = await response.json();
+  console.info('[api] FIRMS response received. Mode:', data.data_mode, '| Count:', data.count ?? data.features?.length);
+  return data;
 }
 
 export async function fetchAnomalies() {
@@ -64,8 +38,8 @@ export async function fetchAnomalies() {
     if (!response.ok) throw new Error(`Anomalies request failed (${response.status})`);
     return await response.json();
   } catch (err) {
-    console.warn('Anomalies fetch failed, using mock data:', err);
-    return demoFallbackGeoJSON();
+    console.error('Anomalies fetch failed:', err);
+    return { type: 'FeatureCollection', features: [] };
   }
 }
 
@@ -216,7 +190,7 @@ export function normalizeAnomaly(feature) {
 }
 
 /**
- * Fetch live events from /api/fires, fall back gracefully to mockGeoJSON
+ * Fetch live events from /api/fires (NASA FIRMS Live Pipeline)
  */
 export async function fetchLiveEvents() {
   const data = await fetchFires();
@@ -227,18 +201,65 @@ export async function fetchLiveEvents() {
     properties: f,
   })) : []);
 
-  if (!rawFeatures || rawFeatures.length === 0) {
-    return demoFallbackGeoJSON();
-  }
-
-  const source = data.data_mode === 'live' ? 'live' : 'demo';
+  const source = data.data_mode === 'demo' ? 'demo' : 'live';
   return {
     type: 'FeatureCollection',
     metadata: {
       source,
+      count: rawFeatures.length,
+      data_mode: data.data_mode || 'live',
+      message: data.message,
     },
     features: rawFeatures.map(normalizeAnomaly),
   };
+}
+
+/**
+ * Fetch a real Gemini AI explanation for an active fire hotspot
+ */
+export async function explainFireEvent(eventProps) {
+  if (!eventProps) return null;
+  const p = eventProps.properties || eventProps;
+  const payload = {
+    event_id: p.id || p.anomaly_id,
+    category: p.category || (typeof p.classification === 'string' ? p.classification : p.classification?.category),
+    confidence: p.confidence,
+    risk_score: p.risk_score,
+    brightness: p.brightness_temp || p.brightness || p.brightness_k,
+    frp: p.frp || p.frp_mw,
+    latitude: p.lat || p.latitude,
+    longitude: p.lng || p.longitude,
+    osm: p.osm_context || p.industrial_context || {
+      is_industrial: p.is_industrial,
+      nearest_industrial_distance_m: p.nearest_industrial_distance_m,
+      relevant_tags: p.relevant_tags || p.matched_tags,
+    },
+    copernicus: p.copernicus_context || {
+      land_cover_type: p.land_cover_type || p.land_cover,
+      ndvi_value: p.ndvi_value,
+    },
+    context: {
+      persistence_hours: p.persistence_hours || 6.0,
+      observation_count: p.observation_count || 1,
+      first_detected: p.first_detected || p.acquired_at,
+      population_5km: p.population_5km,
+    },
+  };
+
+  try {
+    const res = await fetch(`${effectiveApiBase}/api/events/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn('[api] Failed to fetch explanation from /api/events/explain:', err);
+  }
+  return null;
 }
 
 /**

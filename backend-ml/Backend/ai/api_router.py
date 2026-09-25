@@ -11,7 +11,7 @@ from .spatial_engine import spatial_engine
 from .classifier import anomaly_classifier
 from .copilot import disaster_copilot
 
-router = APIRouter(prefix="/api/ai", tags=["Standalone AI Engine & RAG Copilot"])
+router = APIRouter(prefix="/ai", tags=["Standalone AI Engine & RAG Copilot"])
 
 
 class SatelliteHotspotInput(BaseModel):
@@ -103,3 +103,23 @@ async def chat_with_ai_copilot(payload: CopilotQueryInput):
         query=payload.query,
         facility_id=fac_id
     )
+
+
+@router.post("/briefing")
+async def generate_situational_briefing_endpoint(payload: SatelliteHotspotInput):
+    """
+    Dedicated AI Situational Reasoning Layer:
+    Computes origin estimate, containment projection, exposure analysis (hospitals/fire stations),
+    and generates an authoritative situational briefing using Gemini.
+    """
+    from .situational_reasoner import generate_situational_briefing
+    event_dict = {
+        "latitude": payload.latitude,
+        "longitude": payload.longitude,
+        "frp": payload.frp_mw,
+        "brightness": payload.brightness_k,
+        "confidence": payload.confidence,
+        "daynight": payload.daynight,
+    }
+    return generate_situational_briefing(event_dict)
+

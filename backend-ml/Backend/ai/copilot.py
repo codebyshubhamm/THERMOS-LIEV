@@ -77,21 +77,30 @@ class RAGDisasterCopilot:
         sops = ctx["sops"]
 
         gemini_key = os.getenv("GEMINI_API_KEY")
-        if gemini_key:
+        if not gemini_key:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                prompt = f"Facility: {json.dumps(fac)}\nMSDS: {json.dumps(chems)}\nSOPs: {json.dumps(sops)}\nQuestion: {query}"
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
-                    if resp.status_code == 200:
-                        text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                        return {
-                            "answer": text,
-                            "facility_matched": fac["name"] if fac else "General",
-                            "sources": ["Facility Hazmat DB", "Chemical MSDS", "NDMA Guidelines"]
-                        }
+                from app.core.config import get_settings
+                gemini_key = get_settings().GEMINI_API_KEY
             except Exception:
                 pass
+
+        if gemini_key:
+            prompt = f"Facility: {json.dumps(fac)}\nMSDS: {json.dumps(chems)}\nSOPs: {json.dumps(sops)}\nQuestion: {query}"
+            candidate_models = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for model_name in candidate_models:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_key}"
+                    try:
+                        resp = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+                        if resp.status_code == 200:
+                            text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                            return {
+                                "answer": text,
+                                "facility_matched": fac["name"] if fac else "General",
+                                "sources": ["Facility Hazmat DB", "Chemical MSDS", "NDMA Guidelines"]
+                            }
+                    except Exception:
+                        continue
 
         # Failsafe Tactical Response Engine
         fac_name = fac["name"] if fac else "Industrial Complex"

@@ -183,10 +183,10 @@ async def _llm_elaborate(provider: str, question: str, context: str, draft: str)
             r.raise_for_status()
             return r.json()["choices"][0]["message"]["content"]
     if provider == "gemini" and settings.GEMINI_API_KEY:
-        primary_model = getattr(settings, "AI_MODEL", getattr(settings, "GEMINI_MODEL", "gemini-flash-lite-latest")) or "gemini-flash-lite-latest"
+        primary_model = getattr(settings, "AI_MODEL", getattr(settings, "GEMINI_MODEL", "gemini-3.1-flash-lite")) or "gemini-3.1-flash-lite"
         seen_models = set()
         candidate_models = []
-        for m_name in [primary_model, "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]:
+        for m_name in [primary_model, "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash"]:
             if m_name not in seen_models:
                 seen_models.add(m_name)
                 candidate_models.append(m_name)

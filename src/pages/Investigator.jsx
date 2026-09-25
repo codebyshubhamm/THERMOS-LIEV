@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
-import { mockGeoJSON } from '../data/mockData';
 import { getCategoryColor, getRiskColor, getCategoryShort, formatDuration, formatCoords } from '../utils/formatters';
 import EventHistoryChart from '../components/shared/EventHistoryChart';
 import EvidenceCard from '../components/shared/EvidenceCard';
@@ -10,7 +9,7 @@ import { analyzeHotspotAI } from '../services/api';
 
 export default function Investigator() {
   const storeEvents = useStore((s) => s.events?.features);
-  const events = (storeEvents && storeEvents.length > 0) ? storeEvents : mockGeoJSON.features;
+  const events = storeEvents || [];
   const selectEvent = useStore((s) => s.selectEvent);
   const selectedEventId = useStore((s) => s.selectedEventId);
 
@@ -23,16 +22,16 @@ export default function Investigator() {
     return events.find((e) => e.properties?.id === currentId) || events[0] || { properties: {} };
   }, [events, currentId]);
 
-  const p = currentEvent.properties;
+  const p = currentEvent.properties || {};
 
   const handleRunLiveAiScan = async () => {
     setIsScanningAi(true);
     try {
       const res = await analyzeHotspotAI({
-        latitude: p.lat,
-        longitude: p.lng,
+        latitude: p.lat || p.latitude,
+        longitude: p.lng || p.longitude,
         frp_mw: p.frp,
-        brightness_k: p.brightness_temp || 355.0,
+        brightness_k: p.brightness_temp || p.brightness || 355.0,
         confidence: 'h',
         daynight: 'N',
       });
@@ -45,12 +44,30 @@ export default function Investigator() {
   };
 
   const decisionSteps = useMemo(() => {
+    let osmData = {};
+    try {
+      osmData = typeof p.osm_context === 'string' ? JSON.parse(p.osm_context || '{}') : (p.osm_context || p.industrial_context || {});
+    } catch {
+      osmData = p.osm_context || p.industrial_context || {};
+    }
+    const isInd = Boolean(p.is_industrial ?? osmData.is_industrial);
+    const rawDist = p.nearest_industrial_distance_m ?? osmData.nearest_industrial_distance_m;
+    const indDist = rawDist != null ? Math.round(Number(rawDist)) : null;
+    const osmDetail = isInd
+      ? `Coordinate [${Number(p.lat || p.latitude || 0).toFixed(4)}, ${Number(p.lng || p.longitude || 0).toFixed(4)}] verified inside OSM Industrial Zone (${indDist != null ? `${indDist}m buffer` : '<200m buffer'})`
+      : `Coordinate [${Number(p.lat || p.latitude || 0).toFixed(4)}, ${Number(p.lng || p.longitude || 0).toFixed(4)}] ${indDist != null && indDist < 5000 ? `is ${indDist}m from nearest industrial node` : 'has no industrial assets within 2km OSM buffer'}`;
+
+    const landCover = p.land_cover_type || p.land_cover || 'Regional Land Cover';
+    const cat = p.category || (typeof p.classification === 'string' ? p.classification : p.classification?.category) || 'Thermal Hotspot';
+    const conf = Math.round(Number(p.confidence || 75));
+    const risk = Math.round(Number(p.risk_score || conf));
+
     return [
-      { step: '1. Satellite Thermal Ingestion', status: 'Passed', detail: `FRP ${p.frp} MW detected via VIIRS 375m I-Band (3.74µm channel anomaly > 320K)` },
-      { step: '2. Spatial Vector Alignment', status: 'Matched', detail: `Point [${p.lat}, ${p.lng}] lies within 200m buffer of OSM Industrial Zone (${p.land_cover})` },
-      { step: '3. Temporal Persistence Audit', status: 'Confirmed', detail: `Continuous thermal signature logged across ${p.observation_count} satellite passes (${formatDuration(p.persistence_hours)})` },
-      { step: '4. Land-Cover Cross Validation', status: 'Verified', detail: `Copernicus Global Land Service confirms non-vegetated high-albedo industrial surface` },
-      { step: `5. Final Classification: ${p.category}`, status: 'High Confidence', detail: `Ensemble model score: ${p.confidence}% confidence. Risk Tier: ${p.risk_tier} (${p.risk_score}/100)` },
+      { step: '1. Satellite Thermal Ingestion', status: 'Passed', detail: `FRP ${p.frp != null ? Number(p.frp).toFixed(1) : '—'} MW detected via VIIRS 375m I-Band (Brightness: ${p.brightness_temp || p.brightness || 350}K)` },
+      { step: '2. Spatial Vector Alignment', status: isInd ? 'Matched' : 'Evaluated', detail: osmDetail },
+      { step: '3. Temporal Persistence Audit', status: 'Confirmed', detail: `Continuous thermal signature logged across ${p.observation_count || 1} satellite passes (${formatDuration(p.persistence_hours || 1)})` },
+      { step: '4. Land-Cover Cross Validation', status: 'Verified', detail: `Copernicus Land Cover classified as ${String(landCover).replace(/_/g, ' ')} ${p.ndvi_value != null ? `(NDVI: ${Number(p.ndvi_value).toFixed(2)})` : ''}` },
+      { step: `5. Final Classification: ${cat}`, status: 'High Confidence', detail: `Ensemble model score: ${conf}% confidence. Risk Tier: ${p.risk_tier || 'Moderate'} (${risk}/100)` },
     ];
   }, [p]);
 

@@ -66,13 +66,10 @@ export const BASEMAP_STYLES = {
       carto_labels: {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-          'https://c.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-          'https://d.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
         ],
         tileSize: 256,
-        attribution: '&copy; CARTO &copy; OpenStreetMap',
+        attribution: '&copy; Esri &mdash; Boundaries & Places',
       },
     },
     layers: [
@@ -129,10 +126,10 @@ export const BASEMAP_STYLES = {
       carto_labels: {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
         ],
         tileSize: 256,
+        attribution: '&copy; Esri &mdash; Boundaries & Places',
       },
     },
     layers: [
@@ -158,19 +155,24 @@ export const BASEMAP_STYLES = {
   },
   dark: {
     version: 8,
-    name: 'CartoDB Dark Matter',
+    name: 'Esri Dark Gray Canvas',
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
     sources: {
-      carto_dark: {
+      esri_dark: {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
         ],
         tileSize: 256,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        attribution: '&copy; Esri &mdash; Dark Canvas Base',
+      },
+      esri_dark_labels: {
+        type: 'raster',
+        tiles: [
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        ],
+        tileSize: 256,
+        attribution: '&copy; Esri &mdash; Dark Canvas Reference',
       },
     },
     layers: [
@@ -184,9 +186,17 @@ export const BASEMAP_STYLES = {
       {
         id: 'base-tiles',
         type: 'raster',
-        source: 'carto_dark',
+        source: 'esri_dark',
         paint: {
           'raster-opacity': 1.0,
+        },
+      },
+      {
+        id: 'dark-labels',
+        type: 'raster',
+        source: 'esri_dark_labels',
+        paint: {
+          'raster-opacity': 0.85,
         },
       },
     ],

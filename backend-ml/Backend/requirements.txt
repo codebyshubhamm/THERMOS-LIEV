@@ -5,7 +5,7 @@ pydantic-settings==2.12.0
 SQLAlchemy==2.0.43
 alembic==1.19.2
 GeoAlchemy2==0.20.0
-psycopg2-binary==2.9.10
+# psycopg2-binary==2.9.10  # Only needed for PostgreSQL; SQLite used locally
 pandas==2.3.3
 numpy==2.3.5
 geopandas==1.1.4
@@ -17,6 +17,6 @@ joblib==1.5.2
 httpx==0.28.1
 APScheduler==3.11.3
 python-dotenv==1.1.0
+scipy>=1.11.0
 pytest==8.4.2
 pytest-asyncio==1.1.0
-httpx==0.28.1
